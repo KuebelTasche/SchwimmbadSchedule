@@ -1,0 +1,15 @@
+# Von Hand zugeordnete Becken (exakter Kursname -> Becken).
+# Wird von der App unter „Becken zuordnen“ gepflegt. Hat Vorrang vor config.yaml.
+AquaDance: anderes Becken
+AquaDuo: anderes Becken
+AquaFit ÜberGewichtige: anderes Becken
+AquaFlex: anderes Becken
+AquaIntervall: anderes Becken
+AquaRiding Active: anderes Becken
+AquaRiding Basic: anderes Becken
+AquaRiding Medium: anderes Becken
+Babyschwimmen (3 bis 7 Monate): anderes Becken
+Babyschwimmen (7 Mon. bis 1 Jahr): anderes Becken
+Seepferdchen: Lehrschwimmbecken
+Wasserspaß (2 bis 3,5 Jahre): Kleinkinderbereich
+Wasserspaß (3,5 bis 5 Jahre): Lehrschwimmbecken

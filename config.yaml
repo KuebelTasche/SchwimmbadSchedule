@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# Konfiguration für den Nettebad-Belegungsplan
+# Alles hier darfst du frei anpassen. Nach einer Änderung einfach die App neu
+# laden (oben rechts "Rerun" bzw. Taste R) – ein neuer Scrape ist nicht nötig.
+# ---------------------------------------------------------------------------
+
+# Welche Filialen aus dem Buchungsportal interessieren uns?
+# (IDs aus dem Filter im Portal: 9 = "Nettebad", 348 = "Freizeitstandort Nettebad")
+portal:
+  location_ids: [9, 348]
+  location_names: ["Nettebad", "Freizeitstandort Nettebad"]
+  # Kategorien ("Tabs") im Portal. ID -> Name
+  tabs:
+    64: AquaFitness
+    65: Schwimmschule
+    765: Nettebad Akademie
+    767: Yoga
+    772: Osnabrück lernt Schwimmen
+  # Wie weit zurück sollen Kursblöcke gesucht werden? So finden wir auch
+  # Kurse, die schon laufen und deshalb nicht mehr buchbar sind.
+  days_back: 150
+  # Pause zwischen zwei Seitenaufrufen (Sekunden) – höflich bleiben.
+  delay_seconds: 0.7
+
+# Becken-Zuordnung
+# Standard: jeder Nettebad-Kurs gilt als "33m".
+# Ausnahmen: Wenn der Kursname den Text links enthält, wird das Becken rechts
+# genommen (erste passende Regel gewinnt, Groß-/Kleinschreibung egal).
+# Beispiel, falls Babyschwimmen doch im Kleinkinderbereich stattfindet:
+#   "Babyschwimmen": "Kleinkinderbereich"
+#
+# Einfacher: in der App unter „Becken zuordnen“ per Dropdown umstellen.
+# Das landet in becken_manuell.yaml und hat Vorrang vor den Regeln hier.
+becken:
+  standard: "33m"
+  # Diese Becken stehen in der App zur Auswahl (weitere einfach ergänzen)
+  auswahl: ["33m", "Sportwelt", "Lehrschwimmbecken", "Kleinkinderbereich", "anderes Becken", "kein Becken"]
+  regeln:
+    "Yoga im Saunagarten": "kein Becken"
+    "Ausbildung": "kein Becken"
+    "Trainer Ausbildung": "kein Becken"
+
+# Farbliche Gruppen im Kalender. Erste passende Regel gewinnt.
+# "tab:" bezieht sich auf die Portal-Kategorie, sonst Text im Kursnamen.
+kategorien:
+  - name: Ninjacross
+    farbe: "#d9480f"
+    wenn: ["Ninjacross"]
+  - name: Erwachsenenschwimmen
+    farbe: "#1971c2"
+    wenn: ["Erwachsenen"]
+  - name: Aquafitness
+    farbe: "#1098ad"
+    wenn: ["tab:AquaFitness", "Aqua", "WasserGymnastik"]
+  - name: Schwimmschule
+    farbe: "#9c36b5"
+    wenn: ["tab:Schwimmschule", "tab:Osnabrück lernt Schwimmen"]
+  - name: Sonstiges
+    farbe: "#868e96"
+    wenn: []   # fängt alles andere auf
+
+# Öffnungszeiten 33-Meter-Becken (von der Website, Stand 29.09.2026)
+oeffnungszeiten_33m:
+  werktags: "08:00-21:00"           # Mo–Fr
+  wochenende_feiertag: "09:00-21:00" # Sa, So, Feiertag
+
+# Ninjacross-Parcours – immer im 33-Meter-Becken.
+# Stand der Website 29.09.2026. Der Scraper meldet sich, wenn sich der Text
+# auf der Website ändert – dann hier nachziehen.
+ninjacross:
+  becken: "33m"
+  normal:            # außerhalb der Schulferien
+    mo: null         # geschlossen
+    di: "16:00-19:00"
+    mi: "16:00-19:00"
+    do: "16:00-19:00"
+    fr: "16:00-20:00"
+    sa: "12:00-19:00"
+    so: "12:00-19:00"
+    feiertag: "12:00-19:00"
+  ferien:            # "Täglich in den NDS & NRW-Schulferien"
+    mo: null
+    di: "12:00-19:00"
+    mi: "12:00-19:00"
+    do: "12:00-19:00"
+    fr: "12:00-19:00"
+    sa: "12:00-19:00"
+    so: "12:00-19:00"
+    feiertag: "12:00-19:00"
+
+# Schulferien Niedersachsen + NRW (von/bis jeweils inklusive).
+# Quelle: schulferien.org / kalenderpedia.de – bei Bedarf ergänzen.
+schulferien:
+  - {name: "Herbstferien NDS",      von: 2026-10-12, bis: 2026-10-24}
+  - {name: "Herbstferien NRW",      von: 2026-10-17, bis: 2026-10-31}
+  - {name: "Weihnachtsferien NDS",  von: 2026-12-23, bis: 2027-01-09}
+  - {name: "Weihnachtsferien NRW",  von: 2026-12-23, bis: 2027-01-06}
+  - {name: "Winterferien NDS",      von: 2027-02-01, bis: 2027-02-02}
+  - {name: "Osterferien NDS/NRW",   von: 2027-03-22, bis: 2027-04-03}
+  - {name: "Pfingsten NDS",         von: 2027-05-07, bis: 2027-05-07}
+  - {name: "Pfingsten NDS/NRW",     von: 2027-05-18, bis: 2027-05-18}
+  - {name: "Sommerferien NDS",      von: 2027-07-08, bis: 2027-08-18}
+  - {name: "Sommerferien NRW",      von: 2027-07-19, bis: 2027-08-31}
