@@ -1,152 +1,58 @@
 # Nettebad Osnabrück – Belegung 33-Meter-Becken
 
-Wann ist das 33-Meter-Becken in der Erlebniswelt des [Nettebads](https://www.stadtwerke-osnabrueck.de/nettebad)
-frei zum Bahnenschwimmen? Dieses kleine Python-Projekt sammelt alle Kurse (Schwimmschule, Aquafitness,
-Erwachsenenschwimmen) und die Zeiten des Ninjacross-Parcours und zeigt sie in einem Wochenkalender –
-inklusive einer Übersicht der freien Zeitfenster.
+Wann kann man im [Nettebad](https://www.stadtwerke-osnabrueck.de/nettebad) in Ruhe seine Bahnen ziehen?
+Das 33-Meter-Becken in der Erlebniswelt ist oft durch Kurse oder den Ninjacross-Parcours belegt.
+Diese App sammelt alle Belegungen an einem Ort und zeigt, wann das Becken frei ist.
 
 > **Inoffizielles Privatprojekt.** Nicht mit den Stadtwerken Osnabrück oder dem Nettebad verbunden.
-> Alle Angaben ohne Gewähr – maßgeblich sind die Websites des Bads und des Buchungsportals.
+> Alle Angaben ohne Gewähr – maßgeblich sind die offiziellen Seiten des Bads und des Buchungsportals.
 
 | Kalender | Freie Zeiten |
 |---|---|
 | ![Kalenderansicht](docs/kalender.png) | ![Freie Zeitfenster](docs/freie-zeiten.png) |
 
-## Funktionen
+## Was die App zeigt
 
-- **Scraper** für das [Buchungsportal der SWO-Bäder](https://www.swo-baeder-buchungsportal.de/de/bookings/blocks/):
-  lädt alle Kursblöcke des Nettebads samt jedem Einzeltermin – auch Kurse, die schon laufen und nicht mehr
-  buchbar sind. Abgesagte Termine werden erkannt.
-- **Kurse werden nie gelöscht:** Verschwindet ein Kurs aus dem Portal, bleiben seine Termine gespeichert,
-  bis der letzte vorbei ist.
-- **Ninjacross-Parcours** inkl. abweichender Zeiten in den Schulferien (NDS + NRW) und an Feiertagen.
-  Ändern sich die Zeiten auf der Website, weist der Scraper darauf hin.
-- **Streamlit-App** mit
-  - 📅 Wochenkalender (hell/dunkel, Klick auf einen Kurs öffnet ihn im Portal)
-  - 🟢 freien Zeitfenstern für die nächsten 14 Tage
-  - 📋 Liste aller Kursblöcke
-  - 🏷️ Becken-Zuordnung per Dropdown – das Portal verrät nicht, in welchem Becken ein Kurs stattfindet
+### 📅 Kalender
+Eine Wochenansicht aller Belegungen des 33-Meter-Beckens, farbig nach Art:
 
-## Installation
+- **Ninjacross-Parcours** – inklusive der abweichenden Zeiten in den Schulferien und an Feiertagen
+- **Schwimmschule** – Babyschwimmen, Seepferdchen, Bronze/Silber/Gold, Ferienkurse …
+- **Aquafitness** – AquaJogging, AquaFlex, AquaRiding …
+- **Erwachsenenschwimmen** – Anfänger- und Stilschwimmkurse
 
-Voraussetzung: Python 3.9 oder neuer.
+Grau hinterlegt sind die Zeiten, in denen das Becken geschlossen ist, gelb die Schulferien.
+Ein Klick auf einen Kurs öffnet ihn im Buchungsportal. Auf dem Handy zeigt der Kalender einen Tag
+(umschaltbar auf drei Tage oder eine Liste).
 
-```bash
-git clone https://github.com/KuebelTasche/SchwimmbadSchedule.git
-cd SchwimmbadSchedule
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
+### 🟢 Freie Zeiten
+Für die nächsten 14 Tage: eine Zeitleiste pro Tag und eine Liste der Zeitfenster, in denen weder ein Kurs
+noch der Ninjacross-Parcours eingetragen ist. Die Mindestdauer eines freien Fensters ist einstellbar.
 
-## Benutzung
+### 📋 Alle Kurse
+Eine Übersicht aller erfassten Kursblöcke mit Zeitraum, Wochentagen, Uhrzeiten, Anzahl der Termine und
+abgesagten Terminen.
 
-```bash
-python scrape.py          # Kurse aus dem Portal holen (dauert ca. 1–2 Minuten)
-streamlit run app.py      # App öffnen: http://localhost:8501
-```
+### 🏷️ Becken zuordnen
+Das Buchungsportal gibt nur „Nettebad“ an, nicht das Becken. Standardmäßig zählt deshalb jeder Kurs zum
+33-Meter-Becken. Findet ein Kurs woanders statt (z. B. im Lehrschwimmbecken), lässt er sich hier per
+Dropdown umsortieren.
 
-In der App gibt es links außerdem den Button **„Neue Kurse holen“**, der dasselbe macht wie `scrape.py`.
+## Woher die Daten kommen
 
-Tests (laufen ohne Internet, mit gespeicherten HTML-Ausschnitten):
-
-```bash
-python -m pytest -q
-```
-
-## Wie es funktioniert
-
-| Was | Quelle | Wie |
-|---|---|---|
-| Kurse | Buchungsportal, Liste je Kategorie | Filter auf „Nettebad“, Suchbeginn 150 Tage zurück – so kommen auch laufende Kurse mit |
-| Einzeltermine | Detailseite je Kursblock | Datum, Uhrzeit von–bis, Status (z. B. „abgesagt“) |
-| Ninjacross | [Öffnungszeiten Erlebniswelt](https://www.stadtwerke-osnabrueck.de/nettebad/oeffnungszeiten/erlebniswelt) | Zeiten stehen in `config.yaml`, der Scraper vergleicht den Text der Website |
-| Ferien / Feiertage | `config.yaml` / Paket [`holidays`](https://pypi.org/project/holidays/) | für die abweichenden Ninjacross-Zeiten |
-
-Der Scraper wartet zwischen zwei Seitenaufrufen (`delay_seconds` in `config.yaml`). Bitte lass das so –
-einmal am Tag reicht völlig.
-
-### Projektstruktur
-
-| Datei | Inhalt |
+| Was | Quelle |
 |---|---|
-| `scrape.py` | Einstiegspunkt zum Aktualisieren |
-| `portal.py` | Abruf und Auswertung der Websites (Parser ohne Internet testbar) |
-| `db.py` | SQLite-Datenbank `data/nettebad.sqlite` (`blocks` = Kursblöcke, `sessions` = Einzeltermine) |
-| `belegung.py` | Becken-/Kategorie-Zuordnung, Ninjacross-Termine, freie Zeitfenster |
-| `app.py` | Streamlit-App |
-| `config.yaml` | Öffnungszeiten, Ninjacross, Schulferien, Farben, Becken-Regeln |
-| `becken_manuell.yaml` | Becken-Zuordnungen aus der App (wird automatisch angelegt) |
-| `.github/workflows/scrape.yml` | tägliches Update per GitHub Actions |
-| `vendor/` | [FullCalendar](https://fullcalendar.io) 6.1.15 (MIT-Lizenz), damit die App ohne CDN läuft |
+| Kurse und alle Einzeltermine | [Buchungsportal der SWO-Bäder](https://www.swo-baeder-buchungsportal.de/de/bookings/blocks/) |
+| Ninjacross-Parcours, Öffnungszeiten | [Öffnungszeiten Erlebniswelt](https://www.stadtwerke-osnabrueck.de/nettebad/oeffnungszeiten/erlebniswelt) |
+| Schulferien Niedersachsen / NRW, Feiertage | Ferienkalender bzw. Paket [`holidays`](https://pypi.org/project/holidays/) |
 
-## Becken zuordnen
+Die Daten werden einmal täglich aktualisiert. Dabei bleiben auch Kurse erhalten, die nicht mehr im Portal
+stehen (z. B. weil sie ausgebucht sind oder schon laufen), bis ihr letzter Termin vorbei ist.
+Im Portal abgesagte Termine gelten als frei.
 
-Das Buchungsportal gibt nur „Nettebad“ an, nicht das Becken. Standard ist deshalb: **jeder Kurs = 33m**.
+„Frei“ heißt nur: Es ist kein Kurs eingetragen. Andere Badegäste, Vereinstraining oder kurzfristige
+Sperrungen kennt die App nicht.
 
-- **In der App:** Reiter „🏷️ Becken zuordnen“ → Becken per Dropdown ändern → Speichern.
-  Das landet in `becken_manuell.yaml` (exakter Kursname → Becken) und hat Vorrang.
-- **Per Regel** für mehrere Kurse auf einmal (Teil des Kursnamens), in `config.yaml`:
+## Technik
 
-  ```yaml
-  becken:
-    standard: "33m"
-    regeln:
-      "Babyschwimmen": "Kleinkinderbereich"
-  ```
-
-## Pflege
-
-Einmal im Jahr bzw. bei Änderungen am Bad anpassen (alles in `config.yaml`):
-
-- **Schulferien** (`schulferien`) – Niedersachsen und NRW
-- **Öffnungszeiten** des 33-m-Beckens und des **Ninjacross-Parcours** – der Scraper meldet sich, wenn sich
-  der Text auf der Website ändert
-
-## Online nutzen: Streamlit Community Cloud + GitHub Actions
-
-So ist die App vom Handy aus überall erreichbar, ohne dass ein eigener Rechner laufen muss:
-
-1. **GitHub Actions** (`.github/workflows/scrape.yml`) führt jeden Morgen `scrape.py` aus und committet
-   `data/nettebad.sqlite` zurück ins Repo. Manuell starten: *Actions → „Kurse aktualisieren“ → Run workflow*.
-2. **[Streamlit Community Cloud](https://share.streamlit.io):** App aus diesem Repo anlegen, Main file `app.py`.
-   Neue Commits (auch die der Action) übernimmt die App automatisch.
-
-Hinweise:
-
-- Die Becken-Zuordnung aus der App wird in der Cloud nur bis zum nächsten Neustart gespeichert.
-  Dauerhaft: lokal zuordnen und `becken_manuell.yaml` committen.
-- Vor lokaler Arbeit immer erst `git pull`, damit die Datenbank aus der Action nicht mit einer lokalen
-  kollidiert. Im Zweifel die lokale Datenbank verwerfen: `git checkout -- data/nettebad.sqlite`.
-- GitHub schaltet geplante Workflows nach 60 Tagen ohne Aktivität im Repo ab – die täglichen Commits der
-  Action zählen als Aktivität, solange sich Kurse ändern.
-- Alle Zeiten werden in deutscher Zeit (Europe/Berlin) gerechnet, auch wenn die Server in UTC laufen.
-- Auf dem Handy zeigt der Kalender automatisch die Tagesansicht (umschaltbar auf 3 Tage oder Liste).
-
-## Lokal täglich automatisch aktualisieren (optional)
-
-Nur nötig, wenn du GitHub Actions nicht nutzt.
-
-**macOS (launchd):** Datei `~/Library/LaunchAgents/de.nettebad.scrape.plist` anlegen, `/PFAD/ZUM/PROJEKT`
-ersetzen und mit `launchctl load ~/Library/LaunchAgents/de.nettebad.scrape.plist` aktivieren:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>de.nettebad.scrape</string>
-  <key>ProgramArguments</key><array>
-    <string>/PFAD/ZUM/PROJEKT/.venv/bin/python</string>
-    <string>/PFAD/ZUM/PROJEKT/scrape.py</string>
-  </array>
-  <key>WorkingDirectory</key><string>/PFAD/ZUM/PROJEKT</string>
-  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>13</integer></dict>
-  <key>StandardOutPath</key><string>/tmp/nettebad-scrape.log</string>
-  <key>StandardErrorPath</key><string>/tmp/nettebad-scrape.log</string>
-</dict></plist>
-```
-
-Hinweis: Liegt das Projekt in iCloud Drive oder „Dokumente“, braucht `launchd` ggf. „Festplattenvollzugriff“
-für Python.
-
-**Linux (cron):** `13 7 * * * cd /PFAD/ZUM/PROJEKT && .venv/bin/python scrape.py >> /tmp/nettebad-scrape.log 2>&1`
+Python, [Streamlit](https://streamlit.io), SQLite und [FullCalendar](https://fullcalendar.io) (MIT-Lizenz).

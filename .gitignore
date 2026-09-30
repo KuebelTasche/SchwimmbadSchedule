@@ -1,6 +1,9 @@
 .venv/
 __pycache__/
 .pytest_cache/
-data/
 .DS_Store
+
+# Die Datenbank data/nettebad.sqlite gehört ins Repo: GitHub Actions aktualisiert sie
+# täglich und Streamlit Cloud liest sie von dort. Alle anderen SQLite-Dateien nicht.
 *.sqlite
+!data/nettebad.sqlite

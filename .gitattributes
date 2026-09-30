@@ -1,0 +1,2 @@
+# SQLite-Datenbank ist binär – Git soll nicht versuchen, sie zu mergen
+*.sqlite binary
