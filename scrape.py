@@ -5,6 +5,7 @@ Dauer:    ca. 1–2 Minuten (wir warten bewusst zwischen den Seitenaufrufen)
 """
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -13,7 +14,7 @@ from datetime import date, datetime, timedelta
 import requests
 
 import db
-from belegung import load_config
+from belegung import load_config, status_text, wird_beobachtet
 from portal import Portal
 
 
@@ -69,6 +70,23 @@ def schaetze_termine(con, block) -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Beobachtete Kurse -> Meldungen (werden von der GitHub Action als Issue verschickt)
+# ---------------------------------------------------------------------------
+
+def _datum(iso: str | None) -> str:
+    return datetime.fromisoformat(iso).strftime("%d.%m.%Y") if iso else "?"
+
+
+def meldung_text(art: str, b: dict, vorher: str | None = None) -> str:
+    kopf = {"neu": "🆕 **Neuer Kursblock**",
+            "buchbar": f"✅ **Jetzt buchbar** (vorher: {vorher})"}[art]
+    tage = " / ".join(f"{w[:2]} {z}" for w, z in zip(b["weekdays"].split(", "), b["times"].split(", ")))
+    return (f"- {kopf}: {b['course_name']} ({b['location']}) · {tage} · "
+            f"{_datum(b['date_from'])}–{_datum(b['date_to'])} · {b['n_sessions'] or '?'} Termine · "
+            f"{status_text(b)} · [im Portal öffnen]({b['url']})")
+
+
 def run(log=print) -> dict:
     cfg = load_config()
     pcfg = cfg["portal"]
@@ -78,7 +96,7 @@ def run(log=print) -> dict:
     portal = Portal(delay=float(pcfg.get("delay_seconds", 0.7)))
     run_start = db.now_iso()
 
-    neu, warnungen, gesehen = [], [], 0
+    neu, warnungen, gesehen, meldungen = [], [], 0, []
     with db.connect() as con:
         # 1) Kursblöcke je Kategorie
         for tab_id, tab_name in pcfg["tabs"].items():
@@ -98,8 +116,17 @@ def run(log=print) -> dict:
                 if b["location"] not in names:
                     continue
                 gesehen += 1
-                if db.upsert_block(con, b):
+                vorher = db.get_block(con, b["block_id"])
+                ist_neu = db.upsert_block(con, b)
+                if ist_neu:
                     neu.append(b)
+                # Beobachtete Kurse: neuer Block oder gerade buchbar geworden?
+                if wird_beobachtet(b, cfg) and (b["date_to"] or "") >= today.isoformat():
+                    if ist_neu:
+                        meldungen.append(meldung_text("neu", b))
+                    elif (vorher is not None and vorher["booking_status"] is not None
+                          and vorher["booking_status"] != "buchbar" and b["booking_status"] == "buchbar"):
+                        meldungen.append(meldung_text("buchbar", b, vorher["booking_status"]))
             con.commit()
 
         # 2) Einzeltermine für alle Blöcke, die noch nicht vorbei sind
@@ -168,11 +195,32 @@ def run(log=print) -> dict:
         log(f"{len(verschwunden)} Kurse stehen nicht mehr im Portal, bleiben aber bis zum Ende gespeichert:")
         for r in verschwunden:
             log(f"  · {r['course_name']} (Block {r['block_id']}, bis {r['date_to']})")
+    for m in meldungen:
+        log(f"🔔 {m}")
     for w in warnungen:
         log(f"⚠ {w}")
-    return {"neu": neu, "warnungen": warnungen, "gesehen": gesehen}
+    return {"neu": neu, "warnungen": warnungen, "gesehen": gesehen, "meldungen": meldungen}
+
+
+def schreibe_meldungen(pfad: str, meldungen: list[str], cfg: dict) -> None:
+    """Meldungen als Markdown-Datei (Text für das GitHub-Issue). Ohne Meldungen: keine Datei."""
+    if not meldungen:
+        return
+    with open(pfad, "w", encoding="utf-8") as f:
+        f.write("Beim täglichen Abgleich mit dem Buchungsportal ist mir aufgefallen:\n\n")
+        f.write("\n".join(meldungen) + "\n\n")
+        if cfg.get("benachrichtigen"):
+            f.write(f"{cfg['benachrichtigen']}\n\n")
+        f.write("_Beobachtete Kurse stehen in `config.yaml` unter `beobachten`. "
+                "Dieses Issue einfach schließen, wenn erledigt._\n")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Neue Kurse aus dem Buchungsportal holen.")
+    parser.add_argument("--meldungen", metavar="DATEI",
+                        help="Meldungen zu beobachteten Kursen als Markdown in diese Datei schreiben")
+    args = parser.parse_args()
     result = run()
+    if args.meldungen:
+        schreibe_meldungen(args.meldungen, result["meldungen"], load_config())
     sys.exit(0 if result["gesehen"] else 1)

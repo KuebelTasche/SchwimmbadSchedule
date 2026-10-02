@@ -41,6 +41,33 @@ def _clean(text: str) -> str:
 # Parser
 # ---------------------------------------------------------------------------
 
+BUCHBAR_AB_RE = re.compile(r"Erst ab dem (\d{2}\.\d{2}\.\d{4})(?:\s+(\d{1,2}:\d{2}))?")
+
+
+def parse_buchungsoption(td) -> tuple[str | None, str | None]:
+    """Spalte "Buchungsoption" -> (Status, buchbar ab).
+
+    Status: "buchbar" | "ausgebucht" | "gestartet" | "noch nicht buchbar" | anderer Text.
+    "buchbar ab" steht im Tooltip des Vormerken-Buttons, z. B.
+    "Erst ab dem 08.10.2026 18:00 buchbar. Folgebuchbar ab …" -> "2026-10-08T18:00".
+    """
+    if td is None:
+        return None, None
+    text = _clean(td.get_text(" "))
+    tooltips = " ".join((a.get("title") or a.get("data-original-title") or "") for a in td.find_all("a"))
+    m = BUCHBAR_AB_RE.search(f"{tooltips} {text}")
+    if m:
+        ab = de_to_iso(m.group(1)) + (f"T{m.group(2).zfill(5)}" if m.group(2) else "")
+        return "noch nicht buchbar", ab
+    if "Bereits gestartet" in text:
+        return "gestartet", None
+    if "Ausgebucht" in text or "Ausgebucht" in tooltips:
+        return "ausgebucht", None
+    if "Buchen" in text:
+        return "buchbar", None
+    return (text or None), None
+
+
 def parse_block_list(html: str, tab_name: str) -> tuple[list[dict], int | None]:
     """Liest die Kursliste. Gibt (Blöcke, Gesamtanzahl laut Seite) zurück."""
     soup = BeautifulSoup(html, "html.parser")
@@ -61,6 +88,9 @@ def parse_block_list(html: str, tab_name: str) -> tuple[list[dict], int | None]:
         anz_cell = cell("Anz. Termine")
         anz = re.search(r"\d+", anz_cell.get_text(" ")) if anz_cell else None
         times = list(cell("Uhrzeit").stripped_strings) if cell("Uhrzeit") else []
+        frei_cell = cell("Freie Plätze")
+        frei_m = re.search(r"-?\d+", frei_cell.get_text(" ")) if frei_cell else None
+        status, buchbar_ab = parse_buchungsoption(cell("Funktionen"))
         weekdays = list(cell("Wochentag").stripped_strings) if cell("Wochentag") else []
         filiale = _clean(cell("Filiale").get_text(" ")) if cell("Filiale") else ""
 
@@ -75,6 +105,9 @@ def parse_block_list(html: str, tab_name: str) -> tuple[list[dict], int | None]:
             "weekdays": ", ".join(weekdays),
             "times": ", ".join(times),
             "url": f"{BASE}/de/course_blocks/details/{m.group(1)}/",
+            "free_places": int(frei_m.group(0)) if frei_m else None,
+            "booking_status": status,
+            "booking_from": buchbar_ab,
         })
 
     total = None

@@ -69,6 +69,20 @@ with st.sidebar:
             status.update(label=f"Fertig – {len(ergebnis['neu'])} neue Kursblöcke", state="complete")
         st.rerun()
 
+    # Beobachtete Kurse, die gerade buchbar sind oder bald buchbar werden
+    with db.connect() as con:
+        beobachtet = [dict(r) for r in con.execute(
+            "SELECT * FROM blocks WHERE date_to >= ? ORDER BY date_from", (heute.isoformat(),))
+            if belegung.wird_beobachtet(r, cfg)]
+    offen = [b for b in beobachtet if b["booking_status"] in ("buchbar", "noch nicht buchbar")]
+    if offen:
+        st.success("👀 **Beobachtete Kurse**\n\n" + "\n\n".join(
+            f"[{b['course_name']}]({b['url']}) · {b['weekdays'][:2]} {b['times'].split(', ')[0]} "
+            f"ab {datetime.fromisoformat(b['date_from']):%d.%m.} · {belegung.status_text(b)}"
+            for b in offen))
+    elif beobachtet:
+        st.caption(f"👀 {len(beobachtet)} beobachtete Kursblöcke – keiner gerade buchbar.")
+
     if warnungen:
         with st.expander(f"⚠️ {len(warnungen)} Hinweis(e) vom letzten Lauf"):
             for w in warnungen:
@@ -316,19 +330,28 @@ with tab_kurse:
         df["Status"] = df.apply(
             lambda r: "vorbei" if r["date_to"] < heute.isoformat()
             else ("läuft" if r["date_from"] <= heute.isoformat() else "kommt"), axis=1)
+        df["Buchung"] = [belegung.status_text(r) if r["booking_status"] else ""
+                         for r in df.to_dict("records")]
+        df["👀"] = ["👀" if belegung.wird_beobachtet(r, cfg) else "" for r in df.to_dict("records")]
         df["Im Portal"] = df["last_seen"].map(
             lambda s: "ja" if s[:10] == (last_run or "")[:10] else f"zuletzt {s[:10]}")
-        nur_aktuell = st.checkbox("Vergangene Kurse ausblenden", value=True)
+        c1, c2 = st.columns(2)
+        nur_aktuell = c1.checkbox("Vergangene Kurse ausblenden", value=True)
+        nur_beobachtet = c2.checkbox("Nur beobachtete Kurse 👀", value=False)
         if nur_aktuell:
             df = df[df["Status"] != "vorbei"]
+        if nur_beobachtet:
+            df = df[df["👀"] != ""]
         df["date_from"] = pd.to_datetime(df["date_from"])
         df["date_to"] = pd.to_datetime(df["date_to"])
         st.dataframe(
-            df[["location", "course_name", "Kategorie", "Becken", "weekdays", "times", "date_from", "date_to",
-                "n_sessions", "termine_gespeichert", "abgesagt", "Status", "Im Portal", "url"]],
+            df[["👀", "location", "course_name", "weekdays", "times", "date_from", "date_to", "Buchung",
+                "Kategorie", "Becken", "n_sessions", "termine_gespeichert", "abgesagt", "Status", "Im Portal",
+                "url"]],
             hide_index=True, use_container_width=True,
             column_config={
                 "location": "Bad", "course_name": "Kurs", "weekdays": "Wochentag(e)", "times": "Uhrzeit",
+                "Buchung": st.column_config.TextColumn("Buchung", width="medium"),
                 "date_from": st.column_config.DateColumn("von", format="DD.MM.YYYY"),
                 "date_to": st.column_config.DateColumn("bis", format="DD.MM.YYYY"),
                 "n_sessions": "Termine", "termine_gespeichert": "gespeichert",

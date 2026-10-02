@@ -1,5 +1,6 @@
 # Holt jeden Morgen neue Kurse aus dem Buchungsportal und committet die Datenbank.
 # Streamlit Community Cloud übernimmt den neuen Stand danach automatisch.
+# Gibt es Neuigkeiten zu beobachteten Kursen (config.yaml → beobachten), wird ein Issue angelegt.
 # Manuell starten: GitHub → Actions → "Kurse aktualisieren" → "Run workflow".
 name: Kurse aktualisieren
 
@@ -9,7 +10,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write           # nötig, um die Datenbank zurück ins Repo zu schreiben
+  contents: write           # Datenbank zurück ins Repo schreiben
+  issues: write             # Benachrichtigung zu beobachteten Kursen
 
 concurrency:
   group: scrape
@@ -30,7 +32,7 @@ jobs:
         run: pip install requests beautifulsoup4 PyYAML holidays tzdata
 
       - name: Kurse holen
-        run: python scrape.py
+        run: python scrape.py --meldungen meldungen.md
 
       - name: Datenbank committen
         run: |
@@ -43,4 +45,16 @@ jobs:
             git commit -m "Kurse aktualisiert ($(TZ=Europe/Berlin date +'%d.%m.%Y %H:%M'))"
             git pull --rebase
             git push
+          fi
+
+      - name: Benachrichtigung zu beobachteten Kursen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -s meldungen.md ]; then
+            gh issue create \
+              --title "🏊 Neuigkeiten zu beobachteten Kursen ($(TZ=Europe/Berlin date +'%d.%m.%Y'))" \
+              --body-file meldungen.md
+          else
+            echo "Keine Neuigkeiten zu beobachteten Kursen."
           fi

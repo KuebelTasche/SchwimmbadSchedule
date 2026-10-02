@@ -49,6 +49,17 @@ becken:
     "Ausbildung": "kein Becken"
     "Trainer Ausbildung": "kein Becken"
 
+# Beobachtete Kurse: Die tägliche GitHub Action legt ein Issue an (= E-Mail von GitHub),
+# wenn für einen dieser Kurse ein neuer Kursblock auftaucht oder einer buchbar wird
+# (z. B. weil die Anmeldung öffnet oder ein Platz frei wird).
+#   kurs: Teil des Kursnamens (Groß-/Kleinschreibung egal)
+#   bad:  optional, nur dieses Bad
+beobachten:
+  - kurs: "Erwachsenen-Stilschwimmen Fortgeschrittene"
+    bad: "Nettebad"
+# Wer im Issue erwähnt wird (bekommt dadurch sicher eine Benachrichtigung)
+benachrichtigen: "@KuebelTasche"
+
 # Farbliche Gruppen im Kalender. Erste passende Regel gewinnt.
 # "tab:" bezieht sich auf die Portal-Kategorie, sonst Text im Kursnamen.
 kategorien:

@@ -187,6 +187,29 @@ def oeffnungszeiten(d: date, becken: str, cfg: dict) -> list[tuple[time, time]]:
 
 
 # ---------------------------------------------------------------------------
+# Beobachtete Kurse / Buchungsstatus
+# ---------------------------------------------------------------------------
+
+def wird_beobachtet(b: dict, cfg: dict) -> bool:
+    for w in cfg.get("beobachten") or []:
+        if (w.get("kurs", "").lower() in b["course_name"].lower()
+                and (not w.get("bad") or w["bad"] == b["location"])):
+            return True
+    return False
+
+
+def status_text(b) -> str:
+    """Lesbarer Buchungsstatus, z. B. 'buchbar, 3 Plätze frei' oder 'buchbar ab 08.10.2026 18:00'."""
+    status, ab, frei = b["booking_status"], b["booking_from"], b["free_places"]
+    frei = int(frei) if frei is not None and frei == frei else None   # NaN aus pandas -> None
+    if status == "noch nicht buchbar" and ab:
+        return f"buchbar ab {datetime.fromisoformat(ab):%d.%m.%Y %H:%M}".replace(" 00:00", "")
+    if status == "buchbar" and frei is not None:
+        return f"buchbar, {frei} {'Platz' if frei == 1 else 'Plätze'} frei"
+    return status or "unbekannt"
+
+
+# ---------------------------------------------------------------------------
 # Events
 # ---------------------------------------------------------------------------
 

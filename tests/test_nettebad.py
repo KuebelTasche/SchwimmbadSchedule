@@ -230,3 +230,65 @@ def test_freie_zeiten_moskaubad(cfg):
     assert [(a.time(), b.time()) for a, b in frei] == [(time(6), time(8)), (time(14), time(14, 30)),
                                                        (time(15, 15), time(15, 30))]
     assert belegung.freie_zeiten(date(2026, 10, 1), [], cfg, "Moskaubad") == []    # Do geschlossen
+
+
+# --- Buchungsstatus und Meldungen zu beobachteten Kursen ---------------------------
+
+def test_buchungsstatus():
+    blocks, _ = portal.parse_block_list(read("block_list_status.html"), "X")
+    st = {b["block_id"]: (b["booking_status"], b["booking_from"], b["free_places"]) for b in blocks}
+    assert st[107798] == ("buchbar", None, 1)
+    assert st[107804] == ("ausgebucht", None, 0)
+    assert st[107540] == ("gestartet", None, 0)
+    assert st[105214] == ("noch nicht buchbar", "2026-10-08T18:00", 3)
+    assert st[104940] == ("ausgebucht", None, 0)            # "Vormerken" mit Tooltip "Ausgebucht"
+
+
+def test_meldungen(tmp_db, monkeypatch, tmp_path):
+    import copy
+    import scrape
+
+    liste, _ = portal.parse_block_list(read("block_list_status.html"), "Schwimmschule")
+    nettebad = [b for b in liste if b["location"] == "Nettebad"]
+    stand = {"blocks": copy.deepcopy(nettebad)}
+
+    class FakePortal:
+        def __init__(self, delay):
+            pass
+
+        def fetch_tab(self, tab_id, tab_name, since, location_ids):
+            return copy.deepcopy(stand["blocks"]) if tab_name == "Schwimmschule" else []
+
+        def fetch_block_details(self, block_id):
+            return []
+
+        def fetch_oeffnungszeiten(self):
+            return {}
+
+    monkeypatch.setattr(scrape, "Portal", FakePortal)
+    monkeypatch.setattr(db, "today", lambda: date(2026, 10, 2))
+    leise = lambda *_: None
+
+    # Lauf 1: alle Blöcke neu -> Meldungen nur für noch nicht vorbei (107540 endete 01.10.)
+    r1 = scrape.run(log=leise)
+    assert len(r1["meldungen"]) == 2 and all("Neuer Kursblock" in m for m in r1["meldungen"])
+    assert "buchbar, 1 Platz frei" in r1["meldungen"][0]
+
+    # Lauf 2: nichts geändert -> keine Meldung
+    assert scrape.run(log=leise)["meldungen"] == []
+
+    # Lauf 3: im ausgebuchten Dienstagskurs wird ein Platz frei -> Meldung "Jetzt buchbar"
+    for b in stand["blocks"]:
+        if b["block_id"] == 107804:
+            b.update(booking_status="buchbar", free_places=1)
+    r3 = scrape.run(log=leise)
+    assert len(r3["meldungen"]) == 1
+    assert "Jetzt buchbar** (vorher: ausgebucht)" in r3["meldungen"][0] and "Di 18:50" in r3["meldungen"][0]
+
+    # Issue-Text
+    datei = tmp_path / "meldungen.md"
+    scrape.schreibe_meldungen(str(datei), r3["meldungen"], belegung.load_config())
+    text = datei.read_text(encoding="utf-8")
+    assert "@KuebelTasche" in text and "107804" in text
+    scrape.schreibe_meldungen(str(tmp_path / "leer.md"), [], belegung.load_config())
+    assert not (tmp_path / "leer.md").exists()          # ohne Meldungen keine Datei -> kein Issue

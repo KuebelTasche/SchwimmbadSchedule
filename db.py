@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS blocks (
     weekdays        TEXT,                  -- z. B. "Dienstag, Donnerstag"
     times           TEXT,                  -- z. B. "15:25, 15:25"
     url             TEXT,
+    free_places     INTEGER,               -- freie Plätze laut Portal
+    booking_status  TEXT,                  -- buchbar | ausgebucht | gestartet | noch nicht buchbar
+    booking_from    TEXT,                  -- ab wann buchbar (falls noch nicht buchbar)
     first_seen      TEXT NOT NULL,         -- wann wir ihn zum ersten Mal gesehen haben
     last_seen       TEXT NOT NULL,         -- wann er zuletzt im Portal stand
     details_fetched TEXT                   -- wann die Einzeltermine zuletzt geladen wurden
@@ -86,6 +89,10 @@ def _migrate(con: sqlite3.Connection) -> None:
     spalten = {r["name"] for r in con.execute("PRAGMA table_info(sessions)")}
     if "status" not in spalten:
         con.execute("ALTER TABLE sessions ADD COLUMN status TEXT DEFAULT ''")
+    spalten = {r["name"] for r in con.execute("PRAGMA table_info(blocks)")}
+    for name, typ in [("free_places", "INTEGER"), ("booking_status", "TEXT"), ("booking_from", "TEXT")]:
+        if name not in spalten:
+            con.execute(f"ALTER TABLE blocks ADD COLUMN {name} {typ}")
 
 
 def upsert_block(con: sqlite3.Connection, b: dict) -> bool:
@@ -95,18 +102,22 @@ def upsert_block(con: sqlite3.Connection, b: dict) -> bool:
     if exists:
         con.execute(
             """UPDATE blocks SET course_name=?, tab=?, location=?, date_from=?, date_to=?,
-                   n_sessions=?, weekdays=?, times=?, url=?, last_seen=?
+                   n_sessions=?, weekdays=?, times=?, url=?, last_seen=?,
+                   free_places=?, booking_status=?, booking_from=?
                WHERE block_id=?""",
             (b["course_name"], b["tab"], b["location"], b["date_from"], b["date_to"],
-             b["n_sessions"], b["weekdays"], b["times"], b["url"], ts, b["block_id"]),
+             b["n_sessions"], b["weekdays"], b["times"], b["url"], ts,
+             b.get("free_places"), b.get("booking_status"), b.get("booking_from"), b["block_id"]),
         )
         return False
     con.execute(
         """INSERT INTO blocks (block_id, course_name, tab, location, date_from, date_to,
-               n_sessions, weekdays, times, url, first_seen, last_seen)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+               n_sessions, weekdays, times, url, first_seen, last_seen,
+               free_places, booking_status, booking_from)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (b["block_id"], b["course_name"], b["tab"], b["location"], b["date_from"], b["date_to"],
-         b["n_sessions"], b["weekdays"], b["times"], b["url"], ts, ts),
+         b["n_sessions"], b["weekdays"], b["times"], b["url"], ts, ts,
+         b.get("free_places"), b.get("booking_status"), b.get("booking_from")),
     )
     return True
 

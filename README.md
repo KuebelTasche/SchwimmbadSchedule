@@ -32,8 +32,14 @@ Für die nächsten 14 Tage: eine Zeitleiste pro Tag und eine Liste der Zeitfenst
 noch der Ninjacross-Parcours eingetragen ist. Die Mindestdauer eines freien Fensters ist einstellbar.
 
 ### 📋 Alle Kurse
-Eine Übersicht aller erfassten Kursblöcke mit Zeitraum, Wochentagen, Uhrzeiten, Anzahl der Termine und
-abgesagten Terminen.
+Eine Übersicht aller erfassten Kursblöcke mit Zeitraum, Wochentagen, Uhrzeiten, Anzahl der Termine,
+abgesagten Terminen und Buchungsstatus (buchbar mit freien Plätzen, ausgebucht, gestartet oder
+„buchbar ab …“).
+
+### 👀 Beobachtete Kurse
+Einzelne Kurse lassen sich beobachten. Taucht für sie ein neuer Kursblock auf oder wird einer buchbar
+(Anmeldung öffnet, Platz wird frei), erscheint ein Hinweis in der App und die tägliche Aktualisierung
+legt ein GitHub-Issue an – das kommt als Benachrichtigung per E-Mail.
 
 ### 🏷️ Becken zuordnen
 Das Buchungsportal gibt nur das Bad an, nicht das Becken. Standardmäßig zählt deshalb jeder Nettebad-Kurs
