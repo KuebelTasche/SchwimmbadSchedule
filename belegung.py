@@ -45,8 +45,28 @@ def save_manuell(zuordnung: dict[str, str], path: Path | None = None) -> None:
         yaml.safe_dump(dict(sorted(zuordnung.items())), f, allow_unicode=True, sort_keys=False)
 
 
-def becken_nach_regel(kursname: str, cfg: dict) -> str:
-    """Becken laut config.yaml (Regeln bzw. Standard) – ohne manuelle Zuordnung."""
+def standort_becken(location: str | None, cfg: dict) -> str:
+    """Standard-Becken einer Filiale (z. B. "Moskaubad" -> "Moskaubad", "Nettebad" -> "33m")."""
+    standorte = cfg.get("standorte") or {}
+    if not location:
+        return cfg["becken"]["standard"]
+    return standorte.get(location, location)   # unbekanntes Bad: eigenes "Becken" mit seinem Namen
+
+
+def ist_hauptbad(location: str | None, cfg: dict) -> bool:
+    """Gehört die Filiale zum Nettebad (bzw. zum Standard-Becken)?"""
+    return standort_becken(location, cfg) == cfg["becken"]["standard"]
+
+
+def manuell_schluessel(kursname: str, location: str | None, cfg: dict) -> str:
+    """Schlüssel in becken_manuell.yaml: Nettebad-Kurse nur mit Namen, andere Bäder mit Präfix."""
+    return kursname if ist_hauptbad(location, cfg) else f"{location}: {kursname}"
+
+
+def becken_nach_regel(kursname: str, cfg: dict, location: str | None = None) -> str:
+    """Becken laut config.yaml (Standort, Regeln, Standard) – ohne manuelle Zuordnung."""
+    if not ist_hauptbad(location, cfg):
+        return standort_becken(location, cfg)   # die Nettebad-Regeln gelten dort nicht
     regeln = cfg["becken"].get("regeln") or {}
     for text, becken in regeln.items():
         if text.lower() in kursname.lower():
@@ -57,7 +77,8 @@ def becken_nach_regel(kursname: str, cfg: dict) -> str:
 def becken_auswahl(cfg: dict) -> list[str]:
     """Alle Becken, die in der App zur Auswahl stehen."""
     werte = list(cfg["becken"].get("auswahl") or [])
-    for b in [cfg["becken"]["standard"], *(cfg["becken"].get("regeln") or {}).values(),
+    for b in [cfg["becken"]["standard"], *(cfg.get("standorte") or {}).values(),
+              *(cfg["becken"].get("regeln") or {}).values(),
               *(cfg["becken"].get("manuell") or {}).values()]:
         if b not in werte:
             werte.append(b)
@@ -108,12 +129,13 @@ def _as_date(v) -> date:
     return v if isinstance(v, date) else date.fromisoformat(str(v))
 
 
-def becken_fuer(kursname: str, cfg: dict) -> str:
+def becken_fuer(kursname: str, cfg: dict, location: str | None = None) -> str:
     """Becken eines Kurses: erst manuelle Zuordnung aus der App, dann config.yaml."""
     manuell = cfg["becken"].get("manuell") or {}
-    if kursname in manuell:
-        return manuell[kursname]
-    return becken_nach_regel(kursname, cfg)
+    schluessel = manuell_schluessel(kursname, location, cfg)
+    if schluessel in manuell:
+        return manuell[schluessel]
+    return becken_nach_regel(kursname, cfg, location)
 
 
 def kategorie_fuer(kursname: str, tab: str | None, cfg: dict) -> tuple[str, str]:
@@ -128,10 +150,40 @@ def kategorie_fuer(kursname: str, tab: str | None, cfg: dict) -> tuple[str, str]
     return letzte["name"], letzte["farbe"]
 
 
-def oeffnungszeit_33m(d: date, cfg: dict) -> tuple[time, time]:
-    oz = cfg["oeffnungszeiten_33m"]
-    key = "wochenende_feiertag" if d.weekday() >= 5 or ist_feiertag(d) else "werktags"
-    return _parse_range(oz[key])
+UNBEKANNT = "06:00-22:00"   # wenn für ein Becken keine Öffnungszeiten hinterlegt sind
+
+
+def _parse_ranges(text: str | None) -> list[tuple[time, time]]:
+    """ "06:00-08:00, 14:00-15:30" -> [(06:00, 08:00), (14:00, 15:30)] """
+    return [r for r in (_parse_range(t) for t in (text or "").split(",")) if r]
+
+
+def oeffnungszeiten_plan(becken: str, cfg: dict) -> dict | None:
+    plaene = cfg.get("oeffnungszeiten") or {}
+    if becken in plaene:
+        return plaene[becken]
+    if becken == "33m" and "oeffnungszeiten_33m" in cfg:          # ältere config.yaml
+        alt = cfg["oeffnungszeiten_33m"]
+        return {"werktags": alt["werktags"], "wochenende": alt["wochenende_feiertag"],
+                "feiertag": alt["wochenende_feiertag"]}
+    return None
+
+
+def zeiten_fuer_tag(plan: dict | None, wochentag: int, feiertag: bool = False) -> list[tuple[time, time]]:
+    """Öffnungszeiten eines Beckens an einem Wochentag (0 = Montag)."""
+    if plan is None:
+        return _parse_ranges(UNBEKANNT)
+    if feiertag and "feiertag" in plan:
+        return _parse_ranges(plan["feiertag"])
+    tag = WOCHENTAGE[wochentag]
+    if tag in plan:
+        return _parse_ranges(plan[tag])
+    return _parse_ranges(plan.get("wochenende" if wochentag >= 5 else "werktags"))
+
+
+def oeffnungszeiten(d: date, becken: str, cfg: dict) -> list[tuple[time, time]]:
+    """Öffnungszeiten eines Beckens an einem Datum – leer, wenn geschlossen."""
+    return zeiten_fuer_tag(oeffnungszeiten_plan(becken, cfg), d.weekday(), ist_feiertag(d))
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +213,8 @@ def ninja_events(von: date, bis: date, cfg: dict) -> list[Event]:
 def kurs_events(von: date, bis: date, cfg: dict) -> list[Event]:
     with db.connect() as con:
         rows = con.execute(
-            """SELECT s.date, s.start, s.end, s.status, b.block_id, b.course_name, b.tab, b.url
+            """SELECT s.date, s.start, s.end, s.status, b.block_id, b.course_name, b.tab, b.url,
+                      b.location
                FROM sessions s JOIN blocks b USING (block_id)
                WHERE s.date BETWEEN ? AND ?
                  AND COALESCE(s.status, '') != 'abgesagt'   -- abgesagt = Becken frei
@@ -176,7 +229,7 @@ def kurs_events(von: date, bis: date, cfg: dict) -> list[Event]:
             r["course_name"] + (" (geschätzt)" if r["status"] == "geschätzt" else ""),
             datetime.combine(d, time.fromisoformat(r["start"])),
             datetime.combine(d, time.fromisoformat(r["end"])),
-            becken_fuer(r["course_name"], cfg), kat, farbe, "Portal",
+            becken_fuer(r["course_name"], cfg, r["location"]), kat, farbe, "Portal",
             r["block_id"], r["url"],
         ))
     return out
@@ -193,19 +246,23 @@ def events(von: date, bis: date, cfg: dict | None = None) -> list[Event]:
 
 def freie_zeiten(tag: date, evs: list[Event], cfg: dict, becken: str = "33m",
                  min_minuten: int = 30) -> list[tuple[datetime, datetime]]:
-    """Zeitfenster an einem Tag, in denen im Becken nichts eingetragen ist."""
-    auf, zu = oeffnungszeit_33m(tag, cfg)
-    beginn, ende = datetime.combine(tag, auf), datetime.combine(tag, zu)
-    belegt = sorted(
-        (max(e.start, beginn), min(e.ende, ende))
-        for e in evs
-        if e.becken == becken and e.start.date() == tag and e.ende > beginn and e.start < ende
-    )
-    frei, cursor = [], beginn
-    for s, e in belegt:
-        if s > cursor:
-            frei.append((cursor, s))
-        cursor = max(cursor, e)
-    if cursor < ende:
-        frei.append((cursor, ende))
+    """Zeitfenster an einem Tag, in denen im Becken nichts eingetragen ist.
+
+    Berücksichtigt alle Öffnungsfenster des Tages (z. B. Moskaubad Mi 6–8 und 14–15:30).
+    """
+    frei = []
+    for auf, zu in oeffnungszeiten(tag, becken, cfg):
+        beginn, ende = datetime.combine(tag, auf), datetime.combine(tag, zu)
+        belegt = sorted(
+            (max(e.start, beginn), min(e.ende, ende))
+            for e in evs
+            if e.becken == becken and e.start.date() == tag and e.ende > beginn and e.start < ende
+        )
+        cursor = beginn
+        for s_, e_ in belegt:
+            if s_ > cursor:
+                frei.append((cursor, s_))
+            cursor = max(cursor, e_)
+        if cursor < ende:
+            frei.append((cursor, ende))
     return [(a, b) for a, b in frei if (b - a) >= timedelta(minutes=min_minuten)]

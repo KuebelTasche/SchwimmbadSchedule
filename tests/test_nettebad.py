@@ -190,3 +190,43 @@ def test_404_schaetzt_termine(tmp_db, monkeypatch):
         rows = con.execute("SELECT date, start, end, status FROM sessions ORDER BY date").fetchall()
     assert len(rows) == 16                                  # Di+Do 08.09.–12.11. ohne Herbstferien
     assert tuple(rows[0]) == ("2026-09-08", "15:25", "16:10", "geschätzt")   # 45 min Standard
+
+
+# --- Moskaubad --------------------------------------------------------------------
+
+def test_moskaubad_becken(cfg):
+    assert belegung.becken_fuer("Seepferdchen", cfg, "Moskaubad") == "Moskaubad"
+    assert belegung.becken_fuer("Seepferdchen", cfg, "Nettebad") == "33m"
+    assert belegung.becken_fuer("Yoga im Saunagarten", cfg, "Freizeitstandort Nettebad") == "kein Becken"
+    assert belegung.becken_fuer("Kurs X", cfg, "Schinkelbad") == "Schinkelbad"   # nicht konfiguriert
+
+
+def test_manuelle_zuordnung_pro_bad():
+    # Nettebad-Zuordnung darf das Moskaubad nicht treffen – und umgekehrt
+    belegung.save_manuell({"Seepferdchen": "Lehrschwimmbecken",
+                           "Moskaubad: Bronze": "kein Becken"})
+    cfg = belegung.load_config()
+    assert belegung.becken_fuer("Seepferdchen", cfg, "Nettebad") == "Lehrschwimmbecken"
+    assert belegung.becken_fuer("Seepferdchen", cfg, "Moskaubad") == "Moskaubad"
+    assert belegung.becken_fuer("Bronze", cfg, "Moskaubad") == "kein Becken"
+    assert belegung.becken_fuer("Bronze", cfg, "Nettebad") == "33m"
+    assert belegung.manuell_schluessel("Bronze", "Moskaubad", cfg) == "Moskaubad: Bronze"
+    assert belegung.manuell_schluessel("Bronze", "Nettebad", cfg) == "Bronze"
+
+
+def test_oeffnungszeiten_moskaubad(cfg):
+    mi, do = date(2026, 9, 30), date(2026, 10, 1)
+    assert belegung.oeffnungszeiten(mi, "Moskaubad", cfg) == [(time(6), time(8)), (time(14), time(15, 30))]
+    assert belegung.oeffnungszeiten(do, "Moskaubad", cfg) == []                     # Do geschlossen
+    assert belegung.oeffnungszeiten(do, "33m", cfg) == [(time(8), time(21))]
+    assert belegung.oeffnungszeiten(date(2026, 10, 3), "33m", cfg) == [(time(9), time(21))]  # Feiertag
+
+
+def test_freie_zeiten_moskaubad(cfg):
+    mi = date(2026, 9, 30)
+    evs = [belegung.Event("Seepferdchen", datetime(2026, 9, 30, 14, 30), datetime(2026, 9, 30, 15, 15),
+                          "Moskaubad", "x", "#000", "t")]
+    frei = belegung.freie_zeiten(mi, evs, cfg, "Moskaubad", min_minuten=15)
+    assert [(a.time(), b.time()) for a, b in frei] == [(time(6), time(8)), (time(14), time(14, 30)),
+                                                       (time(15, 15), time(15, 30))]
+    assert belegung.freie_zeiten(date(2026, 10, 1), [], cfg, "Moskaubad") == []    # Do geschlossen

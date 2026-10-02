@@ -15,7 +15,7 @@ import streamlit.components.v1 as components
 import belegung
 import db
 
-st.set_page_config(page_title="Nettebad – 33-m-Becken", page_icon="🏊", layout="wide")
+st.set_page_config(page_title="Schwimmbad-Belegung Osnabrück", page_icon="🏊", layout="wide")
 
 WOCHENTAG_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 VENDOR = Path(__file__).parent / "vendor"
@@ -23,23 +23,36 @@ VENDOR = Path(__file__).parent / "vendor"
 IN_DER_CLOUD = str(Path(__file__).resolve()).startswith("/mount/src/")
 
 cfg = belegung.load_config()
-heute = db.today()   # deutsche Zeit, auch wenn der Server in UTC läuft
+heute = db.today()
+
+
+def becken_label(b: str) -> str:
+    """'33m' -> '33m-Becken (Nettebad)', 'Lehrschwimmbecken' -> 'Lehrschwimmbecken (Nettebad)',
+    'Moskaubad' -> 'Moskaubad'. Alle Becken, die kein eigenes Bad sind, liegen im Nettebad."""
+    andere_baeder = {v for v in (cfg.get("standorte") or {}).values() if v != cfg["becken"]["standard"]}
+    if b in andere_baeder or b == "kein Becken":
+        return b
+    name = f"{b}-Becken" if b[:1].isdigit() else b
+    return f"{name} (Nettebad)"   # deutsche Zeit, auch wenn der Server in UTC läuft
 
 # ---------------------------------------------------------------------------
 # Seitenleiste
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.header("🏊 Nettebad")
+    st.header("🏊 Nettebad & Moskaubad")
 
     with db.connect() as con:
         last_run = db.get_meta(con, "last_run")
         warnungen = json.loads(db.get_meta(con, "last_warnings") or "[]")
-        alle_becken = sorted({belegung.becken_fuer(r["course_name"], cfg)
-                              for r in con.execute("SELECT course_name FROM blocks")}
-                             | {cfg["becken"]["standard"], cfg["ninjacross"]["becken"]})
+        vorhanden = {belegung.becken_fuer(r["course_name"], cfg, r["location"])
+                     for r in con.execute("SELECT DISTINCT course_name, location FROM blocks")}
+    # Reihenfolge im Dropdown: 33m zuerst, dann die anderen Bäder, dann der Rest
+    vorne = list(dict.fromkeys([cfg["becken"]["standard"], *(cfg.get("standorte") or {}).values()]))
+    alle_becken = [b for b in vorne if b in vorhanden or b == cfg["becken"]["standard"]]
+    alle_becken += sorted(vorhanden - set(alle_becken) - {"kein Becken"})
 
-    becken = st.selectbox("Becken", alle_becken,
-                          index=alle_becken.index(cfg["becken"]["standard"]))
+    becken = st.selectbox("Becken", alle_becken, index=0,
+                          format_func=lambda b: becken_label(b))
     kat_namen = [k["name"] for k in cfg["kategorien"]]
     kategorien = st.multiselect("Kategorien anzeigen", kat_namen, default=kat_namen)
 
@@ -68,7 +81,7 @@ von, bis = heute - timedelta(days=14), heute + timedelta(days=200)
 alle_events = belegung.events(von, bis, cfg)
 events = [e for e in alle_events if e.becken == becken and e.kategorie in kategorien]
 
-st.markdown(f"### 🏊 Belegung {becken}-Becken")
+st.markdown(f"### 🏊 Belegung {becken_label(becken)}")
 
 tab_kal, tab_frei, tab_kurse, tab_becken = st.tabs(
     ["📅 Kalender", "🟢 Freie Zeiten", "📋 Alle Kurse", "🏷️ Becken zuordnen"])
@@ -93,12 +106,11 @@ with tab_kal:
     } for e in events]
 
     # Öffnungszeiten als "businessHours": außerhalb wird grau hinterlegt
-    oz = cfg["oeffnungszeiten_33m"]
-    w_auf, w_zu = oz["werktags"].split("-")
-    we_auf, we_zu = oz["wochenende_feiertag"].split("-")
+    # (FullCalendar zählt Wochentage ab Sonntag = 0, Python ab Montag = 0)
+    plan = belegung.oeffnungszeiten_plan(becken, cfg)
     business = [
-        {"daysOfWeek": [1, 2, 3, 4, 5], "startTime": w_auf, "endTime": w_zu},
-        {"daysOfWeek": [0, 6], "startTime": we_auf, "endTime": we_zu},
+        {"daysOfWeek": [(wt + 1) % 7], "startTime": f"{a:%H:%M}", "endTime": f"{b:%H:%M}"}
+        for wt in range(7) for a, b in belegung.zeiten_fuer_tag(plan, wt)
     ]
     # Hell oder dunkel? Der Kalender läuft in einem eigenen iframe und bekommt das
     # Streamlit-Theme nicht automatisch mit – deshalb geben wir es ihm mit.
@@ -252,8 +264,8 @@ with tab_frei:
             alt.Chart(pd.DataFrame(balken))
             .mark_bar(cornerRadius=3, opacity=0.9)
             .encode(
-                x=alt.X("von:Q", title=None, scale=alt.Scale(domain=[6.5, 21.5]),
-                        axis=alt.Axis(values=list(range(7, 22)), format="d", labelOverlap=True,
+                x=alt.X("von:Q", title=None, scale=alt.Scale(domain=[5.75, 21.75]),
+                        axis=alt.Axis(values=list(range(6, 22)), format="d", labelOverlap=True,
                                       labelExpr="datum.value + ':00'", orient="top")),
                 x2="bis:Q",
                 y=alt.Y("Tag:N", sort=tage, title=None),
@@ -269,7 +281,13 @@ with tab_frei:
     st.markdown("##### Freie Zeitfenster")
     for tag, label, frei, belegt in tage_info:
         titel = ("**Heute** · " if tag == heute else "") + f"**{label}**"
-        frei_text = " · ".join(f"{a:%H:%M}–{b:%H:%M}" for a, b in frei) or "nichts frei"
+        offen = belegung.oeffnungszeiten(tag, becken, cfg)
+        if not offen:
+            frei_text = "geschlossen"
+        elif tag == heute and all(datetime.combine(tag, zu) <= jetzt for _, zu in offen):
+            frei_text = "heute schon geschlossen"
+        else:
+            frei_text = " · ".join(f"{a:%H:%M}–{b:%H:%M}" for a, b in frei) or "nichts frei"
         with st.expander(f"{titel} — 🟢 {frei_text}", expanded=(tag == heute)):
             if belegt:
                 for e in belegt:
@@ -293,7 +311,7 @@ with tab_kurse:
     if df.empty:
         st.info("Noch keine Kurse gespeichert.")
     else:
-        df["Becken"] = df["course_name"].map(lambda n: belegung.becken_fuer(n, cfg))
+        df["Becken"] = [belegung.becken_fuer(n, cfg, l) for n, l in zip(df["course_name"], df["location"])]
         df["Kategorie"] = [belegung.kategorie_fuer(n, t, cfg)[0] for n, t in zip(df["course_name"], df["tab"])]
         df["Status"] = df.apply(
             lambda r: "vorbei" if r["date_to"] < heute.isoformat()
@@ -306,11 +324,11 @@ with tab_kurse:
         df["date_from"] = pd.to_datetime(df["date_from"])
         df["date_to"] = pd.to_datetime(df["date_to"])
         st.dataframe(
-            df[["course_name", "Kategorie", "Becken", "weekdays", "times", "date_from", "date_to",
+            df[["location", "course_name", "Kategorie", "Becken", "weekdays", "times", "date_from", "date_to",
                 "n_sessions", "termine_gespeichert", "abgesagt", "Status", "Im Portal", "url"]],
             hide_index=True, use_container_width=True,
             column_config={
-                "course_name": "Kurs", "weekdays": "Wochentag(e)", "times": "Uhrzeit",
+                "location": "Bad", "course_name": "Kurs", "weekdays": "Wochentag(e)", "times": "Uhrzeit",
                 "date_from": st.column_config.DateColumn("von", format="DD.MM.YYYY"),
                 "date_to": st.column_config.DateColumn("bis", format="DD.MM.YYYY"),
                 "n_sessions": "Termine", "termine_gespeichert": "gespeichert",
@@ -333,17 +351,18 @@ with tab_becken:
 
     with db.connect() as con:
         kb = pd.read_sql_query(
-            "SELECT course_name, tab, weekdays, times, date_to FROM blocks", con)
+            "SELECT course_name, location, tab, weekdays, times, date_to FROM blocks", con)
 
     if kb.empty:
         st.info("Noch keine Kurse gespeichert.")
     else:
         kurz = {"Montag": "Mo", "Dienstag": "Di", "Mittwoch": "Mi", "Donnerstag": "Do",
                 "Freitag": "Fr", "Samstag": "Sa", "Sonntag": "So"}
+        kb["location"] = kb["location"].fillna("")
         aktuell = kb[kb["date_to"] >= heute.isoformat()]
         zeilen = []
-        for name, gruppe in kb.groupby("course_name"):
-            laufend = aktuell[aktuell["course_name"] == name]
+        for (bad, name), gruppe in kb.groupby(["location", "course_name"]):
+            laufend = aktuell[(aktuell["course_name"] == name) & (aktuell["location"] == bad)]
             slots = []
             for wds, zs in zip(laufend["weekdays"], laufend["times"]):
                 for wd, z in zip((wds or "").split(", "), (zs or "").split(", ")):
@@ -351,24 +370,30 @@ with tab_becken:
                     if s.strip() and s not in slots:
                         slots.append(s)
             zeilen.append({
+                "Bad": bad,
                 "Kurs": name,
                 "Kategorie": belegung.kategorie_fuer(name, gruppe["tab"].iloc[0], cfg)[0],
                 "Aktuelle Termine": ", ".join(sorted(slots, key=lambda x: (list(kurz.values()).index(x[:2])
                                                                           if x[:2] in kurz.values() else 9, x))),
                 "Blöcke": len(laufend),
-                "Becken": belegung.becken_fuer(name, cfg),
+                "Becken": belegung.becken_fuer(name, cfg, bad),
             })
-        tabelle = pd.DataFrame(zeilen).sort_values(["Kategorie", "Kurs"]).reset_index(drop=True)
+        tabelle = pd.DataFrame(zeilen).sort_values(["Bad", "Kategorie", "Kurs"]).reset_index(drop=True)
 
-        nur_laufende = st.checkbox("Nur Kurse mit aktuellen oder kommenden Terminen", value=True)
+        c1, c2 = st.columns([2, 3])
+        baeder = sorted(tabelle["Bad"].unique())
+        bad_filter = c1.radio("Bad", ["alle", *baeder], horizontal=True)
+        nur_laufende = c2.checkbox("Nur Kurse mit aktuellen oder kommenden Terminen", value=True)
+        if bad_filter != "alle":
+            tabelle = tabelle[tabelle["Bad"] == bad_filter].reset_index(drop=True)
         if nur_laufende:
             tabelle = tabelle[tabelle["Blöcke"] > 0].reset_index(drop=True)
 
         bearbeitet = st.data_editor(
             tabelle,
-            hide_index=True, use_container_width=True, key=f"becken_editor_{nur_laufende}",
+            hide_index=True, use_container_width=True, key=f"becken_editor_{bad_filter}_{nur_laufende}",
             height=35 * (len(tabelle) + 1) + 3,     # alle Kurse ohne Scrollen
-            disabled=["Kurs", "Kategorie", "Aktuelle Termine", "Blöcke"],
+            disabled=["Bad", "Kurs", "Kategorie", "Aktuelle Termine", "Blöcke"],
             column_config={
                 "Becken": st.column_config.SelectboxColumn(
                     "Becken ✏️", options=belegung.becken_auswahl(cfg), required=True, width="medium"),
@@ -378,17 +403,19 @@ with tab_becken:
 
         geaendert = bearbeitet[bearbeitet["Becken"] != tabelle["Becken"]]
         if not geaendert.empty:
-            st.info(" · ".join(f"**{r.Kurs}** → {r.Becken}" for r in geaendert.itertuples()))
+            st.info(" · ".join(f"**{r.Kurs}** ({r.Bad}) → {r.Becken}" for r in geaendert.itertuples()))
 
         if st.button("💾 Speichern", type="primary", disabled=geaendert.empty):
             manuell = dict(cfg["becken"].get("manuell") or {})
             for r in bearbeitet.itertuples():
-                if r.Becken == belegung.becken_nach_regel(r.Kurs, cfg):
-                    manuell.pop(r.Kurs, None)      # entspricht wieder der Regel -> Eintrag unnötig
+                # Nettebad: Schlüssel = Kursname; andere Bäder: "Moskaubad: Kursname"
+                schluessel = belegung.manuell_schluessel(r.Kurs, r.Bad, cfg)
+                if r.Becken == belegung.becken_nach_regel(r.Kurs, cfg, r.Bad):
+                    manuell.pop(schluessel, None)      # entspricht wieder der Regel -> Eintrag unnötig
                 else:
-                    manuell[r.Kurs] = r.Becken
+                    manuell[schluessel] = r.Becken
             belegung.save_manuell(manuell)
-            for k in ("becken_editor_True", "becken_editor_False"):
+            for k in [k for k in st.session_state if str(k).startswith("becken_editor_")]:
                 st.session_state.pop(k, None)   # Bearbeitungen sind jetzt gespeichert
             st.toast(f"{len(geaendert)} Zuordnung(en) gespeichert", icon="✅")
             st.rerun()
@@ -396,4 +423,4 @@ with tab_becken:
         manuell = cfg["becken"].get("manuell") or {}
         if manuell:
             st.caption(f"{len(manuell)} Kurs(e) von Hand zugeordnet (gespeichert in becken_manuell.yaml). "
-                       "Zum Zurücksetzen einfach wieder „33m“ auswählen und speichern.")
+                       "Zum Zurücksetzen einfach wieder das Standard-Becken des Bads (z. B. „33m“) wählen und speichern.")

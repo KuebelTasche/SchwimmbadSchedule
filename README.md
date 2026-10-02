@@ -1,10 +1,11 @@
-# Nettebad Osnabrück – Belegung 33-Meter-Becken
+# Nettebad & Moskaubad Osnabrück – Belegung der Schwimmbecken
 
 Wann kann man im [Nettebad](https://www.stadtwerke-osnabrueck.de/nettebad) in Ruhe seine Bahnen ziehen?
 Das 33-Meter-Becken in der Erlebniswelt ist oft durch Kurse oder den Ninjacross-Parcours belegt.
 Diese App sammelt alle Belegungen an einem Ort und zeigt, wann das Becken frei ist.
+Zusätzlich lässt sich das Hallenbad im [Moskaubad](https://www.stadtwerke-osnabrueck.de/moskaubad) auswählen.
 
-> **Inoffizielles Privatprojekt.** Nicht mit den Stadtwerken Osnabrück oder dem Nettebad verbunden.
+> **Inoffizielles Privatprojekt.** Nicht mit den Stadtwerken Osnabrück, dem Nettebad oder dem Moskaubad verbunden.
 > Alle Angaben ohne Gewähr – maßgeblich sind die offiziellen Seiten des Bads und des Buchungsportals.
 
 | Kalender | Freie Zeiten |
@@ -14,9 +15,10 @@ Diese App sammelt alle Belegungen an einem Ort und zeigt, wann das Becken frei i
 ## Was die App zeigt
 
 ### 📅 Kalender
-Eine Wochenansicht aller Belegungen des 33-Meter-Beckens, farbig nach Art:
+Eine Wochenansicht aller Belegungen des gewählten Beckens (33-Meter-Becken im Nettebad oder Moskaubad),
+farbig nach Art:
 
-- **Ninjacross-Parcours** – inklusive der abweichenden Zeiten in den Schulferien und an Feiertagen
+- **Ninjacross-Parcours** (nur Nettebad) – inklusive der abweichenden Zeiten in den Schulferien und an Feiertagen
 - **Schwimmschule** – Babyschwimmen, Seepferdchen, Bronze/Silber/Gold, Ferienkurse …
 - **Aquafitness** – AquaJogging, AquaFlex, AquaRiding …
 - **Erwachsenenschwimmen** – Anfänger- und Stilschwimmkurse
@@ -34,16 +36,17 @@ Eine Übersicht aller erfassten Kursblöcke mit Zeitraum, Wochentagen, Uhrzeiten
 abgesagten Terminen.
 
 ### 🏷️ Becken zuordnen
-Das Buchungsportal gibt nur „Nettebad“ an, nicht das Becken. Standardmäßig zählt deshalb jeder Kurs zum
-33-Meter-Becken. Findet ein Kurs woanders statt (z. B. im Lehrschwimmbecken), lässt er sich hier per
-Dropdown umsortieren.
+Das Buchungsportal gibt nur das Bad an, nicht das Becken. Standardmäßig zählt deshalb jeder Nettebad-Kurs
+zum 33-Meter-Becken und jeder Moskaubad-Kurs zum Moskaubad. Findet ein Kurs woanders statt (z. B. im
+Lehrschwimmbecken), lässt er sich hier pro Bad per Dropdown umsortieren.
 
 ## Woher die Daten kommen
 
 | Was | Quelle |
 |---|---|
 | Kurse und alle Einzeltermine | [Buchungsportal der SWO-Bäder](https://www.swo-baeder-buchungsportal.de/de/bookings/blocks/) |
-| Ninjacross-Parcours, Öffnungszeiten | [Öffnungszeiten Erlebniswelt](https://www.stadtwerke-osnabrueck.de/nettebad/oeffnungszeiten/erlebniswelt) |
+| Ninjacross-Parcours, Öffnungszeiten Nettebad | [Öffnungszeiten Erlebniswelt](https://www.stadtwerke-osnabrueck.de/nettebad/oeffnungszeiten/erlebniswelt) |
+| Öffnungszeiten Moskaubad (Hallenbad) | [Öffnungszeiten Hallenbad](https://www.stadtwerke-osnabrueck.de/moskaubad/oeffnungszeiten/hallenbad) |
 | Schulferien Niedersachsen / NRW, Feiertage | Ferienkalender bzw. Paket [`holidays`](https://pypi.org/project/holidays/) |
 
 Die Daten werden einmal täglich aktualisiert. Dabei bleiben auch Kurse erhalten, die nicht mehr im Portal
