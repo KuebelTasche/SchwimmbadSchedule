@@ -38,7 +38,7 @@ abgesagten Terminen und Buchungsstatus (buchbar mit freien Plätzen, ausgebucht,
 
 ### 👀 Beobachtete Kurse
 Einzelne Kurse lassen sich beobachten. Taucht für sie ein neuer Kursblock auf oder wird einer buchbar
-(Anmeldung öffnet, Platz wird frei), erscheint ein Hinweis in der App und die tägliche Aktualisierung
+(Anmeldung öffnet, Platz wird frei), erscheint ein Hinweis in der App und die regelmäßige Aktualisierung
 legt ein GitHub-Issue an – das kommt als Benachrichtigung per E-Mail.
 
 ### 🏷️ Becken zuordnen
@@ -55,7 +55,7 @@ Lehrschwimmbecken), lässt er sich hier pro Bad per Dropdown umsortieren.
 | Öffnungszeiten Moskaubad (Hallenbad) | [Öffnungszeiten Hallenbad](https://www.stadtwerke-osnabrueck.de/moskaubad/oeffnungszeiten/hallenbad) |
 | Schulferien Niedersachsen / NRW, Feiertage | Ferienkalender bzw. Paket [`holidays`](https://pypi.org/project/holidays/) |
 
-Die Daten werden einmal täglich aktualisiert. Dabei bleiben auch Kurse erhalten, die nicht mehr im Portal
+Die Daten werden zweimal täglich aktualisiert (morgens und abends). Dabei bleiben auch Kurse erhalten, die nicht mehr im Portal
 stehen (z. B. weil sie ausgebucht sind oder schon laufen), bis ihr letzter Termin vorbei ist.
 Im Portal abgesagte Termine gelten als frei.
 

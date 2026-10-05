@@ -1,4 +1,4 @@
-# Holt jeden Morgen neue Kurse aus dem Buchungsportal und committet die Datenbank.
+# Holt zweimal täglich neue Kurse aus dem Buchungsportal und committet die Datenbank.
 # Streamlit Community Cloud übernimmt den neuen Stand danach automatisch.
 # Gibt es Neuigkeiten zu beobachteten Kursen (config.yaml → beobachten), wird ein Issue angelegt.
 # Manuell starten: GitHub → Actions → "Kurse aktualisieren" → "Run workflow".
@@ -6,7 +6,9 @@ name: Kurse aktualisieren
 
 on:
   schedule:
-    - cron: "13 4 * * *"   # täglich 04:13 UTC = 06:13 Sommerzeit / 05:13 Winterzeit
+    # zweimal täglich (UTC): morgens und abends nach 18 Uhr, wenn oft neue Anmeldungen öffnen
+    - cron: "13 4 * * *"    # 04:13 UTC = 06:13 Sommerzeit / 05:13 Winterzeit
+    - cron: "13 17 * * *"   # 17:13 UTC = 19:13 Sommerzeit / 18:13 Winterzeit
   workflow_dispatch:
 
 permissions:
